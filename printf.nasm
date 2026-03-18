@@ -3,18 +3,25 @@ global _start
 ;---------------------------------------
 section .data
 
-msg:	db	"Hello, nasm!!", 0x0a
-msg_len	equ	$-msg
+BUF_SIZE:	equ	100
+
+buf:		times BUF_SIZE db	0
 ;---------------------------------------
 
 ;---------------------------------------
 section .text
 
 _start:
+	xor	rdi, rdi
+	lea	rsi, buf
+	mov	rdx, BUF_SIZE
+	xor	rax, rax
+	syscall
+
 	mov	rdi, 1
-	lea	rsi, msg
-	mov	rdx, msg_len
-	mov	rax, 0x01
+	lea	rsi, buf
+	mov	rdx, BUF_SIZE
+	mov	rax, 0x1
 	syscall
 
 	xor	rdi, rdi
