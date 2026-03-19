@@ -37,8 +37,9 @@ spec_choice:
 section .data
 
 dgt:		db	"0123456789abcdef"
+s:		db	"Hello!!!", 0x0
 
-fmt:		db	"my pointer = %p", 0xa, 0x0
+fmt:		db	"my letter = %c, my pointer = %p, my string = {%s}", 0xa, 0x0
 
 buf:		times BUF_SIZE db	0
 ;---------------------------------------
@@ -48,7 +49,9 @@ section .text
 
 _start:
 	lea	rdi, fmt
-	mov	rsi, 0xdeadbeef
+	mov	rsi, 'A'
+	mov	rdx, 0xdeadbeef
+	lea	rcx, s
 	call	printf
 
 	xor	rdi, rdi
@@ -103,6 +106,9 @@ printf:
 .spec_a:
 .spec_b:
 .spec_c:
+	pop	rax
+	stosb
+	jmp	.continue
 .spec_d:
 .spec_e:
 .spec_f:
@@ -118,20 +124,23 @@ printf:
 .spec_p:
 	pop	rdx
 	push	rcx
-	call	hex_to_aptr
+	call	print_p
 	pop	rcx
-	sub	rcx, 16+2
+	sub	rcx, 16+2-1	; 16 digits + "0x"
 	jmp	.continue
 .spec_q:
 .spec_r:
 .spec_s:
+	pop	rdx
+	call	print_s
+	jmp	.continue
 .spec_t:
 .spec_u:
 .spec_v:
 .spec_w:
 .spec_x:
 	pop	rdx
-	call	hex_to_a
+	call	print_x
 	jmp	.continue
 .spec_y:
 .spec_z:
@@ -149,13 +158,6 @@ printf:
 	mov	rax, 0x1
 	syscall
 
-;	pop	rsi
-;	pop	rdx
-;	pop	rcx
-;	pop	r8
-;	pop	r9
-
-
 	cmp	rsp, rbp
 	jge	.stack_ok
 
@@ -169,7 +171,7 @@ ret
 
 ; %rdx - input
 ; %rdi - dest string
-hex_to_aptr:
+print_p:
 	mov	ax, 'x'*0x100 + '0'	; > "0x"
 	stosw
 
@@ -187,7 +189,7 @@ hex_to_aptr:
 ret
 
 
-hex_to_a:
+print_x:
 	push	rcx
 	mov	rcx, 16
 
@@ -214,4 +216,21 @@ hex_to_a:
 
 	test	rdx, rdx
 	jnz	.loop
+ret
+
+
+;rdx - input string
+print_s:
+	push	rsi
+	mov	rsi, rdx
+
+.loop:
+	lodsb
+	test	al, al
+	jz	.exit
+	stosb
+	loop	.loop
+
+.exit:
+	pop	rsi
 ret
