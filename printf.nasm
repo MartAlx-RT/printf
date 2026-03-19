@@ -7,39 +7,36 @@ section .rodata
 align 8
 
 spec_jmptbl:
-	dq	printf.dflt	; %a
-	dq	printf.spec_b	; %b
-	dq	printf.spec_c	; %c
-	dq	printf.spec_d	; %d
-	dq	printf.dflt	; %e
-	dq	printf.dflt	; %f
-	dq	printf.dflt	; %g
-	dq	printf.dflt	; %h
-	dq	printf.dflt	; %i
-	dq	printf.dflt	; %j
-	dq	printf.dflt	; %k
-	dq	printf.dflt	; %l
-	dq	printf.dflt	; %m
-	dq	printf.dflt	; %n
-	dq	printf.dflt	; %o
-	dq	printf.spec_p	; %p
-	dq	printf.dflt	; %q
-	dq	printf.dflt	; %r
-	dq	printf.spec_s	; %s
-	dq	printf.dflt	; %t
-	dq	printf.dflt	; %u
-	dq	printf.dflt	; %v
-	dq	printf.dflt	; %w
-	dq	printf.spec_x	; %x
-	dq	printf.dflt	; %y
-	dq	printf.dflt	; %z
-                	
+		dq	printf.dflt	; %a
+
+		dq	printf.spec_b	; %b
+		dq	printf.spec_c	; %c
+		dq	printf.spec_d	; %d
+
+times('o'-'d')	dq	printf.dflt
+
+		dq	printf.spec_p	; %p
+
+times('r'-'p')	dq	printf.dflt
+
+		dq	printf.spec_s	; %s
+
+times('w'-'s')	dq	printf.dflt
+
+		dq	printf.spec_x	; %x
+
+times('z'-'x')	dq	printf.dflt
+
 section .data   	
 
 ;-----------------------------------------------------
 dgt:		db	"0123456789abcdef"
 s:		db	"Hello!!!", 0x0
 fmt:		db	"my letter = %c, my pointer = %p, my str = {%s}, my bits = %b, my decimal = %d", 0xa, 0x0
+
+; -1, "love", 3802, 100, 31, 33
+; fmt:	"%d %s  %x %d%%%b%c"
+
 ;-----------------------------------------------------
 
 ;=====================================================
@@ -59,7 +56,7 @@ _start:
 	mov	rdx, 0xdeadbeef
 	lea	rcx, s
 	mov	r8, 0xf
-	mov	r9, 12345
+	mov	r9, -1
 	call	printf
 
 	xor	rdi, rdi
@@ -120,7 +117,7 @@ printf:
 	je	.str		; "%%" => write '%'
 
 	cmp	al, 'z'		; max avalible symbol
-	jg	.dflt
+	ja	.dflt
 
 	sub	rax, 'a'	; calculate tbl index
 	jmp	spec_jmptbl[rax*8]
@@ -187,7 +184,7 @@ printf:
 	syscall
 
 	cmp	rsp, rbp
-	jge	.stack_ok
+	jae	.stack_ok
 	mov	rsp, rbp
 
 .stack_ok:
