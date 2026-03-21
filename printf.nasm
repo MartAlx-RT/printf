@@ -349,6 +349,7 @@ print_d:
 	cmp	rax, 0
 	jge	.unsigned
 	neg	rax
+
 	mov	byte [rdi], '-'
 	inc	rdi
 	dec	rcx
