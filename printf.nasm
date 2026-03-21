@@ -32,7 +32,8 @@ section .data
 ;-----------------------------------------------------
 dgt:		db	"0123456789abcdef"
 s:		db	"Hello!!!", 0x0
-fmt:		db	"my letter = %c, my pointer = %p, my str = {%s}, my bits = %b, my decimal = %d", 0xa, 0x0
+;fmt:		db	"my letter = %c, my pointer = %p, my str = {%s}, my bits = %b, my decimal = %d", 0xa, 0x0
+fmt:		db	"%d", 0xa, 0x0
 
 ; -1, "love", 3802, 100, 31, 33
 ; fmt:	"%d %s  %x %d%%%b%c"
@@ -40,9 +41,10 @@ fmt:		db	"my letter = %c, my pointer = %p, my str = {%s}, my bits = %b, my decim
 ;-----------------------------------------------------
 
 ;=====================================================
-printf_err_msg:	db	"printf: unexpected specificator", 0xa, 0x0
-ERR_MSG_LEN:	equ	$-printf_err_msg
-buf:		times BUF_SIZE db	0
+printf_err_msg:		db	"printf: unexpected specificator", 0xa, 0x0
+ERR_MSG_LEN:		equ	$-printf_err_msg
+
+buf:	times BUF_SIZE	db	0
 ;=====================================================
 
 
@@ -52,11 +54,12 @@ section .text
 
 _start:
 	lea	rdi, fmt
-	mov	rsi, 'A'
-	mov	rdx, 0xdeadbeef
-	lea	rcx, s
-	mov	r8, 0xf
-	mov	r9, -1
+	mov	rsi, -12345
+	;mov	rsi, 'A'
+	;mov	rdx, 0xdeadbeef
+	;lea	rcx, s
+	;mov	r8, 0xf
+	;mov	r9, -1
 	call	printf
 
 	xor	rdi, rdi
@@ -129,6 +132,7 @@ printf:
 	pop	rdx
 	call	print_b
 	jmp	.continue
+
 .spec_c:
 	pop	rax
 	stosb
@@ -136,7 +140,6 @@ printf:
 .spec_d:
 	pop	rax
 	push	rdx
-	xor	rdx, rdx
 	call	print_d
 	pop	rdx
 	jmp	.continue
@@ -335,7 +338,7 @@ ret
 ;	print_d - prints decimal
 ;-----------------------------------------------------
 ; EXPECTED:
-;		rdx	number
+;		rax	number
 ;		rdi	dest str (buf)
 
 ; RETURNS:	none
@@ -343,10 +346,19 @@ ret
 ; DESTROYS:	rax, rbx, rcx, rdx, rdi, r8
 ;=====================================================
 print_d:
+	cmp	rax, 0
+	jge	.unsigned
+	neg	rax
+	mov	byte [rdi], '-'
+	inc	rdi
+	dec	rcx
+
+.unsigned:
 	mov	r8, rcx
 	mov	rbx, 10
 	xor	rcx, rcx
 
+	xor	rdx, rdx
 .push_digit:
 	div	rbx
 	push	qword dgt[rdx]
