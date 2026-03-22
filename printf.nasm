@@ -51,23 +51,23 @@ buf:	times BUF_SIZE	db	0
 
 
 section .text
-global _start
+global printf
 
 
-_start:
-	lea	rdi, fmt
-	;mov	rsi, -12345
-	mov	rsi, 'A'
-	mov	rdx, 0xdeadbeef
-	lea	rcx, s
-	mov	r8, 0xf
-	mov	r9, -1
-	call	printf
-
-	xor	rdi, rdi
-	mov	rax, 0x3c
-	syscall
-; end _start
+;_start:
+;	lea	rdi, fmt
+;	;mov	rsi, -12345
+;	mov	rsi, 'A'
+;	mov	rdx, 0xdeadbeef
+;	lea	rcx, s
+;	mov	r8, 0xf
+;	mov	r9, -1
+;	call	printf
+;
+;	xor	rdi, rdi
+;	mov	rax, 0x3c
+;	syscall
+;; end _start
 
 
 
