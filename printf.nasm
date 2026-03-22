@@ -1,5 +1,6 @@
-global _start
+default	rel
 
+%define	OFFSET(lbl)	lbl-spec_jmptbl
 ;---------------------------------------
 BUF_SIZE	equ	0x400
 ;---------------------------------------
@@ -7,33 +8,33 @@ section .rodata
 align 8
 
 spec_jmptbl:
-		dq	printf.dflt	; %a
+		dq	OFFSET(printf.dflt)	; %a
 
-		dq	printf.spec_b	; %b
-		dq	printf.spec_c	; %c
-		dq	printf.spec_d	; %d
+		dq	OFFSET(printf.spec_b)	; %b
+		dq	OFFSET(printf.spec_c)	; %c
+		dq	OFFSET(printf.spec_d)	; %d
 
-times('o'-'d')	dq	printf.dflt
+times('o'-'d')	dq	OFFSET(printf.dflt)
 
-		dq	printf.spec_p	; %p
+		dq	OFFSET(printf.spec_p)	; %p
 
-times('r'-'p')	dq	printf.dflt
+times('r'-'p')	dq	OFFSET(printf.dflt)
 
-		dq	printf.spec_s	; %s
+		dq	OFFSET(printf.spec_s)	; %s
 
-times('w'-'s')	dq	printf.dflt
+times('w'-'s')	dq	OFFSET(printf.dflt)
 
-		dq	printf.spec_x	; %x
+		dq	OFFSET(printf.spec_x)	; %x
 
-times('z'-'x')	dq	printf.dflt
+times('z'-'x')	dq	OFFSET(printf.dflt)
 
 section .data   	
 
 ;-----------------------------------------------------
 dgt:		db	"0123456789abcdef"
 s:		db	"Hello!!!", 0x0
-;fmt:		db	"my letter = %c, my pointer = %p, my str = {%s}, my bits = %b, my decimal = %d", 0xa, 0x0
-fmt:		db	"%d", 0xa, 0x0
+fmt:		db	"%c, my pointer = %p, my str = {%s}, my bits = %b, my decimal = %d", 0xa, 0x0
+;fmt:		db	"%d", 0xa, 0x0
 
 ; -1, "love", 3802, 100, 31, 33
 ; fmt:	"%d %s  %x %d%%%b%c"
@@ -49,17 +50,18 @@ buf:	times BUF_SIZE	db	0
 
 
 
-
 section .text
+global _start
+
 
 _start:
 	lea	rdi, fmt
-	mov	rsi, -12345
-	;mov	rsi, 'A'
-	;mov	rdx, 0xdeadbeef
-	;lea	rcx, s
-	;mov	r8, 0xf
-	;mov	r9, -1
+	;mov	rsi, -12345
+	mov	rsi, 'A'
+	mov	rdx, 0xdeadbeef
+	lea	rcx, s
+	mov	r8, 0xf
+	mov	r9, -1
 	call	printf
 
 	xor	rdi, rdi
@@ -122,8 +124,13 @@ printf:
 	cmp	al, 'z'		; max avalible symbol
 	ja	.dflt
 
-	sub	rax, 'a'	; calculate tbl index
-	jmp	spec_jmptbl[rax*8]
+.crnt_adr:
+	lea	rbx, spec_jmptbl	; %rbx = absolute jmptbl addr
+	and	rax, 0xff
+	mov	rax, [rbx + 8*(rax-'a')]
+	;mov	rax, spec_jmptbl[8*(rax-'a')]
+	add	rax, rbx
+	jmp	rax
 
 
 ;	SPECIFICATOR CHOICE
@@ -137,6 +144,7 @@ printf:
 	pop	rax
 	stosb
 	jmp	.continue
+
 .spec_d:
 	pop	rax
 	push	rdx
@@ -221,7 +229,8 @@ print_p:
 	mov	rax, rdx
 	and	rax, 0xf
 
-	mov	al, byte dgt[rax]
+	lea	rbx, dgt
+	mov	al, byte [rbx+rax]
 	stosb
 	loop	.loop
 
@@ -249,7 +258,8 @@ print_x:
 	and	rdx, 0xfffffffffffffff0
 	and	rax, 0xf
 
-	mov	al, byte dgt[rax]
+	lea	rbx, dgt
+	mov	al, byte [rbx+rax]
 	stosb
 	dec	rcx
 	rol	rdx, 4
@@ -318,10 +328,11 @@ print_b:
 .loop:
 	mov	rax, rdx
 	and	rdx, 0xfffffffffffffffe
-	and	rax, 1
 
-	mov	al, byte dgt[rax]
+	and	rax, 1
+	add	al, '0'
 	stosb
+
 	dec	rcx
 	rol	rdx, 1
 
@@ -362,7 +373,9 @@ print_d:
 	xor	rdx, rdx
 .push_digit:
 	div	rbx
-	push	qword dgt[rdx]
+
+	add	rdx, '0'
+	push	rdx
 	xor	rdx, rdx
 
 	inc	rcx
