@@ -95,17 +95,29 @@ global printf
 ;=====================================================
 
 printf:
+	mov	r13, rbp
 	xor	r15, r15	; printf ret val (initial=0)
+	lea	r10, buf
+	add	r10, BUF_SIZE	; %r10 = max avaliable %rdi
+	mov	r14, [rsp]
+	sub	rsp, 4*8
 	mov	rbp, rsp	; save rsp
-	push	r9
-	push	r8
-	push	rcx		; push stdcall registers
-	push	rdx
-	push	rsi
+
+;	push	r9
+;	push	r8
+;	push	rcx		; push stdcall registers
+;	push	rdx
+;	push	rsi
+	mov	[rbp], rsi
+	mov	[rbp+1*8], rdx
+	mov	[rbp+2*8], rcx
+	mov	[rbp+3*8], r8
+	mov	[rbp+4*8], r9
+	;mov	[rbp+5*8], r9
 
 	mov	rsi, rdi
 	lea	rdi, buf	; rsi -> fmt, rdi -> buf
-	mov	rcx, BUF_SIZE	; rcx = max buf size
+	;mov	rcx, BUF_SIZE	; rcx = max buf size
 	xor	rax, rax
 
 	cld
@@ -125,6 +137,9 @@ printf:
 	ja	.dflt
 
 .crnt_adr:
+	mov	rdx, [rbp]
+	add	rbp, 8
+
 	lea	rbx, spec_jmptbl	; %rbx = absolute jmptbl addr
 	and	rax, 0xff
 	mov	rax, [rbx + 8*(rax-'a')]
@@ -133,40 +148,32 @@ printf:
 	jmp	rax
 
 
+
 ;	SPECIFICATOR CHOICE
 ;-----------------------------------------------------
 .spec_b:
-	pop	rdx
 	call	print_b
 	jmp	.continue
 
 .spec_c:
-	pop	rax
+	mov	rax, rdx
 	stosb
 	jmp	.continue
 
 .spec_d:
-	pop	rax
-	push	rdx
+	mov	rax, rdx
 	call	print_d
-	pop	rdx
 	jmp	.continue
 
 .spec_p:
-	pop	rdx
-	push	rcx
 	call	print_p
-	pop	rcx
-	sub	rcx, 16+2-1	; 16 digits + "0x"
 	jmp	.continue
 
 .spec_s:
-	pop	rdx
 	call	print_s
 	jmp	.continue
 
 .spec_x:
-	pop	rdx
 	call	print_x
 	jmp	.continue
 
@@ -174,33 +181,36 @@ printf:
 	stosb
 
 .continue:
-	loop	.loop
+	cmp	rdi, r10
+	jb	.loop
 
 .dflt:
 	mov	r15, 1		; ret val = 1 (error)
+	push	rdi
 	mov	rdi, 1
 	lea	rsi, printf_err_msg
 	mov	rdx, ERR_MSG_LEN
 	mov	rax, 0x1
 	syscall
+	pop	rdi
 
 ;	EXIT
 ;-----------------------------------------------------
 .exit:
-	mov	rdi, 1
 	lea	rsi, buf
-	mov	rdx, BUF_SIZE
-	sub	rdx, rcx
+	mov	rdx, rdi
+	sub	rdx, rsi	; %rdx = %rdi - buf
+;	mov	rdx, rdi
+;	add	rdx, BUF_SIZE	; %rdx = %rdi - buf = 
+;	sub	rdx, r10	;      = %rdi - %r10 + BUF_SIZE
+	mov	rdi, 1
 	mov	rax, 0x1
 	syscall
 
-	cmp	rsp, rbp
-	jae	.stack_ok
-	mov	rsp, rbp
-
-.stack_ok:
-
+	add	rsp, 4*8
+	mov	[rsp], r14
 	mov	rax, r15	; rax = ret val
+	mov	rbp, r13
 ret
 ;=====================================================
 
@@ -239,7 +249,6 @@ ret
 
 
 print_x:
-	push	rcx
 	mov	rcx, 16
 
 .skip_lead0:
@@ -251,7 +260,6 @@ print_x:
 	loop	.skip_lead0
 
 .done:
-	pop	rcx
 	cld
 .loop:
 	mov	rax, rdx
@@ -261,7 +269,6 @@ print_x:
 	lea	rbx, dgt
 	mov	al, byte [rbx+rax]
 	stosb
-	dec	rcx
 	rol	rdx, 4
 
 	test	rdx, rdx
@@ -311,7 +318,6 @@ ret
 ; DESTROYS:	rax, rcx, rdx, rdi
 ;=====================================================
 print_b:
-	push	rcx
 	mov	rcx, 64
 
 .skip_lead0:
@@ -323,7 +329,6 @@ print_b:
 	loop	.skip_lead0
 
 .done:
-	pop	rcx
 	cld
 .loop:
 	mov	rax, rdx
@@ -333,7 +338,6 @@ print_b:
 	add	al, '0'
 	stosb
 
-	dec	rcx
 	rol	rdx, 1
 
 	test	rdx, rdx
@@ -363,13 +367,11 @@ print_d:
 
 	mov	byte [rdi], '-'
 	inc	rdi
-	dec	rcx
 
 .unsigned:
-	mov	r8, rcx
 	mov	rbx, 10
-	xor	rcx, rcx
 
+	xor	rcx, rcx
 	xor	rdx, rdx
 .push_digit:
 	div	rbx
@@ -382,15 +384,11 @@ print_d:
 	test	rax, rax
 	jnz	.push_digit
 
-	sub	r8, rcx
-
 	cld
 .print_digit:
 	pop	rax
 	stosb
 	loop	.print_digit
-
-	mov	rcx, r8
 ret
 ;=====================================================
 
