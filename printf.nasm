@@ -2,7 +2,7 @@ default	rel
 
 %define	OFFSET(lbl)	lbl-spec_jmptbl
 ;---------------------------------------
-BUF_SIZE	equ	0x400
+BUF_SIZE	equ	20
 ;---------------------------------------
 section .rodata
 align 8
@@ -14,8 +14,9 @@ spec_jmptbl:
 		dq	OFFSET(printf.spec_c)	; %c
 		dq	OFFSET(printf.spec_d)	; %d
 
-times('o'-'d')	dq	OFFSET(printf.dflt)
+times('n'-'d')	dq	OFFSET(printf.dflt)
 
+		dq	OFFSET(printf.spec_o)	; %o
 		dq	OFFSET(printf.spec_p)	; %p
 
 times('r'-'p')	dq	OFFSET(printf.dflt)
@@ -42,7 +43,7 @@ fmt:		db	"%c, my pointer = %p, my str = {%s}, my bits = %b, my decimal = %d", 0x
 ;-----------------------------------------------------
 
 ;=====================================================
-printf_err_msg:		db	"printf: unexpected specificator", 0xa, 0x0
+printf_err_msg:		db	"printf: unexpected specifier", 0xa, 0x0
 ERR_MSG_LEN:		equ	$-printf_err_msg
 
 buf:	times BUF_SIZE	db	0
@@ -50,36 +51,16 @@ buf:	times BUF_SIZE	db	0
 
 
 
+
+
+
+
+
+
+
+
 section .text
 global printf
-
-
-;_start:
-;	lea	rdi, fmt
-;	;mov	rsi, -12345
-;	mov	rsi, 'A'
-;	mov	rdx, 0xdeadbeef
-;	lea	rcx, s
-;	mov	r8, 0xf
-;	mov	r9, -1
-;	call	printf
-;
-;	xor	rdi, rdi
-;	mov	rax, 0x3c
-;	syscall
-;; end _start
-
-
-
-
-
-
-
-
-
-
-
-
 ;=====================================================
 ;	PRINTF:	print format strs
 ;-----------------------------------------------------
@@ -90,34 +71,27 @@ global printf
 ; RETURNS:	0 in case normal terminating
 ;		1 if any errors occured
 
-; DESTROYS:	rax, rbx, rcx, rdx, rsi, rdi, rbp,
-;		r8, r9, r15
+; DESTROYS:	according stdcall convention
 ;=====================================================
 
 printf:
-	mov	r13, rbp
-	xor	r15, r15	; printf ret val (initial=0)
-	lea	r10, buf
-	add	r10, BUF_SIZE	; %r10 = max avaliable %rdi
-	mov	r14, [rsp]
-	sub	rsp, 4*8
-	mov	rbp, rsp	; save rsp
+	mov	r10, [rsp]	; %r10 = ret adr
+	sub	rsp, 5*8
 
-;	push	r9
-;	push	r8
-;	push	rcx		; push stdcall registers
-;	push	rdx
-;	push	rsi
-	mov	[rbp], rsi
-	mov	[rbp+1*8], rdx
-	mov	[rbp+2*8], rcx
-	mov	[rbp+3*8], r8
-	mov	[rbp+4*8], r9
-	;mov	[rbp+5*8], r9
+	mov	[rsp], rbp	; save %rbp
+	mov	[rsp+1*8], rsi
+	mov	[rsp+2*8], rdx
+	mov	[rsp+3*8], rcx
+	mov	[rsp+4*8], r8
+	mov	[rsp+5*8], r9
+	lea	rbp, [rsp+8]
+
+;	lea	r9, buf
+;	add	r9, BUF_SIZE	; %r9 = max avaliable %rdi
+	lea	r9, [buf+BUF_SIZE-0x10]	; -16 just in case
 
 	mov	rsi, rdi
 	lea	rdi, buf	; rsi -> fmt, rdi -> buf
-	;mov	rcx, BUF_SIZE	; rcx = max buf size
 	xor	rax, rax
 
 	cld
@@ -135,16 +109,16 @@ printf:
 
 	cmp	al, 'z'		; max avalible symbol
 	ja	.dflt
+	cmp	al, 'a'		; min avalible symbol
+	jb	.dflt
 
-.crnt_adr:
 	mov	rdx, [rbp]
 	add	rbp, 8
 
-	lea	rbx, spec_jmptbl	; %rbx = absolute jmptbl addr
+	lea	r8, spec_jmptbl	; %rbx = absolute jmptbl addr
 	and	rax, 0xff
-	mov	rax, [rbx + 8*(rax-'a')]
-	;mov	rax, spec_jmptbl[8*(rax-'a')]
-	add	rax, rbx
+	mov	rax, [r8 + 8*(rax-'a')]
+	add	rax, r8
 	jmp	rax
 
 
@@ -156,13 +130,17 @@ printf:
 	jmp	.continue
 
 .spec_c:
-	mov	rax, rdx
+	movsx	rax, edx
 	stosb
 	jmp	.continue
 
 .spec_d:
-	mov	rax, rdx
+	movsx	rax, edx
 	call	print_d
+	jmp	.continue
+
+.spec_o:
+	call	print_o
 	jmp	.continue
 
 .spec_p:
@@ -181,39 +159,61 @@ printf:
 	stosb
 
 .continue:
-	cmp	rdi, r10
+	cmp	rdi, r9
 	jb	.loop
+	call	write
+	jmp	.loop
 
 .dflt:
-	mov	r15, 1		; ret val = 1 (error)
-	push	rdi
+	push	r10
 	mov	rdi, 1
 	lea	rsi, printf_err_msg
 	mov	rdx, ERR_MSG_LEN
 	mov	rax, 0x1
 	syscall
-	pop	rdi
+	pop	r10
+	mov	rax, 1		; ret val = 1 (error)
+	jmp	.exit
 
 ;	EXIT
 ;-----------------------------------------------------
-.exit:
-	lea	rsi, buf
-	mov	rdx, rdi
-	sub	rdx, rsi	; %rdx = %rdi - buf
+;.write:
+;	push	r10
+;	lea	rsi, buf
 ;	mov	rdx, rdi
-;	add	rdx, BUF_SIZE	; %rdx = %rdi - buf = 
-;	sub	rdx, r10	;      = %rdi - %r10 + BUF_SIZE
-	mov	rdi, 1
-	mov	rax, 0x1
-	syscall
-
+;	sub	rdx, rsi	; %rdx = %rdi - buf
+;	mov	rdi, 1
+;	mov	rax, 0x1
+;	syscall
+;	pop	r10
+;	xor	rax, rax	; ret val = 0 (ok)
+;
+.exit:
+	call	write
+	pop	rbp
 	add	rsp, 4*8
-	mov	[rsp], r14
-	mov	rax, r15	; rax = ret val
-	mov	rbp, r13
+	mov	[rsp], r10
 ret
 ;=====================================================
 
+
+
+
+write:
+	push	rsi
+	lea	rsi, buf
+	mov	rdx, rdi
+	sub	rdx, rsi
+	mov	rdi, 1
+	mov	rax, 0x1
+	syscall
+	pop	rsi
+
+	lea	rdi, buf
+	cmp	rax, 0
+	setl	al
+	movzx	rax, al
+ret
 
 
 
@@ -238,10 +238,10 @@ print_p:
 	rol	rdx, 4
 	mov	rax, rdx
 	and	rax, 0xf
-
-	lea	rbx, dgt
-	mov	al, byte [rbx+rax]
+	lea	r8, dgt
+	mov	al, byte [r8+rax]
 	stosb
+
 	loop	.loop
 
 ret
@@ -253,9 +253,7 @@ print_x:
 
 .skip_lead0:
 	rol	rdx, 4
-	mov	al, dl
-	and	al, 0x0f
-	test	al, al
+	test	dl, 0xf
 	jnz	.done
 	loop	.skip_lead0
 
@@ -263,12 +261,12 @@ print_x:
 	cld
 .loop:
 	mov	rax, rdx
-	and	rdx, 0xfffffffffffffff0
 	and	rax, 0xf
-
-	lea	rbx, dgt
-	mov	al, byte [rbx+rax]
+	lea	r8, dgt
+	mov	al, byte [r8+rax]
 	stosb
+
+	and	rdx, ~(0xf)
 	rol	rdx, 4
 
 	test	rdx, rdx
@@ -297,7 +295,11 @@ print_s:
 	test	al, al
 	jz	.exit
 	stosb
-	loop	.loop
+
+	cmp	rdi, r9
+	jb	.loop
+	call	write
+	jmp	.loop
 
 .exit:
 	pop	rsi
@@ -322,22 +324,19 @@ print_b:
 
 .skip_lead0:
 	rol	rdx, 1
-	mov	al, dl
-	and	al, 1
-	test	al, al
+	test	dl, 1
 	jnz	.done
 	loop	.skip_lead0
 
 .done:
 	cld
 .loop:
-	mov	rax, rdx
-	and	rdx, 0xfffffffffffffffe
-
-	and	rax, 1
+	test	dl, 1
+	setnz	al
 	add	al, '0'
 	stosb
 
+	and	rdx, ~(1)
 	rol	rdx, 1
 
 	test	rdx, rdx
@@ -358,7 +357,7 @@ ret
 
 ; RETURNS:	none
 
-; DESTROYS:	rax, rbx, rcx, rdx, rdi, r8
+; DESTROYS:	rax, r8, rcx, rdx, rdi, r8
 ;=====================================================
 print_d:
 	cmp	rax, 0
@@ -369,18 +368,18 @@ print_d:
 	inc	rdi
 
 .unsigned:
-	mov	rbx, 10
+	mov	r8, 10
 
 	xor	rcx, rcx
 	xor	rdx, rdx
 .push_digit:
-	div	rbx
+	div	r8
 
 	add	rdx, '0'
 	push	rdx
 	xor	rdx, rdx
-
 	inc	rcx
+
 	test	rax, rax
 	jnz	.push_digit
 
@@ -391,4 +390,59 @@ print_d:
 	loop	.print_digit
 ret
 ;=====================================================
+
+
+
+
+
+;=====================================================
+;	print_o - prints octal
+;-----------------------------------------------------
+; EXPECTED:
+;		rdx	number
+;		rdi	dest str (buf)
+
+; RETURNS:	none
+
+; DESTROYS:	rax, rcx, rdx, rdi
+;=====================================================
+print_o:
+	mov	rcx, 21		; max num of oct digit
+
+	rol	rdx, 1		; check high bit
+	test	dl, 1
+	jz	.skip_lead0	; 0 => check by triplets
+
+	mov	al, '1'		; 1 => write '1'
+	stosb
+	rol	rdx, 3
+	jmp	.loop
+
+.skip_lead0:
+	rol	rdx, 3
+	test	dl, 0o7
+	jnz	.done
+	loop	.skip_lead0
+
+.done:
+	cld
+.loop:
+	mov	al, dl
+	and	al, 0o7
+	add	al, '0'
+	stosb
+
+	and	rdx, ~(0o7)
+	rol	rdx, 3
+
+	test	rdx, rdx
+	jnz	.loop
+ret
+;=====================================================
+
+
+
+
+
+
 
