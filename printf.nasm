@@ -14,7 +14,11 @@ spec_jmptbl:
 		dq	OFFSET(printf.spec_c)	; %c
 		dq	OFFSET(printf.spec_d)	; %d
 
-times('n'-'d')	dq	OFFSET(printf.dflt)
+		dq	OFFSET(printf.dflt)	; %e
+
+		dq	OFFSET(printf.spec_f)	; %f
+
+times('n'-'f')	dq	OFFSET(printf.dflt)
 
 		dq	OFFSET(printf.spec_o)	; %o
 		dq	OFFSET(printf.spec_p)	; %p
@@ -34,12 +38,8 @@ section .data
 ;-----------------------------------------------------
 dgt:		db	"0123456789abcdef"
 s:		db	"Hello!!!", 0x0
-fmt:		db	"%c, my pointer = %p, my str = {%s}, my bits = %b, my decimal = %d", 0xa, 0x0
-;fmt:		db	"%d", 0xa, 0x0
-
-; -1, "love", 3802, 100, 31, 33
-; fmt:	"%d %s  %x %d%%%b%c"
-
+PREC		dd	100000.0
+;fmt:		db	"%c, my pointer = %p, my str = {%s}, my bits = %b, my decimal = %d", 0xa, 0x0
 ;-----------------------------------------------------
 
 ;=====================================================
@@ -80,38 +80,27 @@ global printf
 ;=====================================================
 
 printf:
+	; regs
 	mov	[reg], rsi
 	mov	[reg+1*8], rdx
 	mov	[reg+2*8], rcx
 	mov	[reg+3*8], r8
 	mov	[reg+4*8], r9
 
+	; floats
 	vmovss	[xmm], xmm0
 	vmovss	[xmm+1*4], xmm1
 	vmovss	[xmm+2*4], xmm2
 	vmovss	[xmm+3*4], xmm3
-	vmovss	[xmm+4*4], xmm4
+	vmovss	[xmm+4*4], xmm4		; TODO not working, unfortunately
 	vmovss	[xmm+5*4], xmm5
 	vmovss	[xmm+6*4], xmm6
 	vmovss	[xmm+7*4], xmm7
 
 	push	rbp
-	mov	rbp, rsp
+	mov	rbp, rsp	; rbp -> first fastcall arg
 	add	rbp, 2*8
 
-;	mov	r10, [rsp]	; %r10 = ret adr
-;	sub	rsp, 5*8
-;
-;	mov	[rsp], rbp	; save %rbp
-;	mov	[rsp+1*8], rsi
-;	mov	[rsp+2*8], rdx
-;	mov	[rsp+3*8], rcx
-;	mov	[rsp+4*8], r8
-;	mov	[rsp+5*8], r9
-;	lea	rbp, [rsp+8]
-
-;	lea	r9, buf
-;	add	r9, BUF_SIZE	; %r9 = max avaliable %rdi
 	lea	r9, [buf+BUF_SIZE-0x10]	; -16 just in case
 
 	mov	rsi, rdi
@@ -136,10 +125,6 @@ printf:
 	cmp	al, 'a'		; min avalible symbol
 	jb	.dflt
 
-	call	get_int
-
-;	mov	rdx, [rbp]
-;	add	rbp, 8
 
 	lea	r8, spec_jmptbl	; %rbx = absolute jmptbl addr
 	and	rax, 0xff
@@ -152,32 +137,44 @@ printf:
 ;	SPECIFICATOR CHOICE
 ;-----------------------------------------------------
 .spec_b:
+	call	get_int
 	call	print_b
 	jmp	.continue
 
 .spec_c:
+	call	get_int
 	movsx	rax, edx
 	stosb
 	jmp	.continue
 
 .spec_d:
+	call	get_int
 	movsx	rax, edx
 	call	print_d
 	jmp	.continue
 
+.spec_f:
+	call	get_flt
+	call	print_f
+	jmp	.continue
+
 .spec_o:
+	call	get_int
 	call	print_o
 	jmp	.continue
 
 .spec_p:
+	call	get_int
 	call	print_p
 	jmp	.continue
 
 .spec_s:
+	call	get_int
 	call	print_s
 	jmp	.continue
 
 .spec_x:
+	call	get_int
 	call	print_x
 	jmp	.continue
 
@@ -203,17 +200,6 @@ printf:
 
 ;	EXIT
 ;-----------------------------------------------------
-;.write:
-;	push	r10
-;	lea	rsi, buf
-;	mov	rdx, rdi
-;	sub	rdx, rsi	; %rdx = %rdi - buf
-;	mov	rdi, 1
-;	mov	rax, 0x1
-;	syscall
-;	pop	r10
-;	xor	rax, rax	; ret val = 0 (ok)
-;
 .exit:
 	call	write
 	pop	rbp
@@ -472,7 +458,7 @@ ret
 
 ; gets int argument
 ;
-; %rbp 	must point to first stack arg
+; %rbp 	must point to stack arg
 ; %rdx	ret val
 get_int:
 	mov	r8, [reg_cnt]
@@ -487,3 +473,44 @@ ret	; if arg is register
 	mov	rdx, [rbp]
 	add	rbp, 8
 ret
+
+
+
+; gets float argument
+;
+; %rbp	must point to stk arg
+; %xmm0	ret val
+get_flt:
+	mov	r8, [xmm_cnt]
+	cmp	r8, 8
+	jae	.stk
+
+	lea	rdx, xmm
+	vmovss	xmm0, [rdx+8*r8]
+	inc	qword [xmm_cnt]
+ret	; if not stk
+.stk:
+	vmovss	xmm0, [rbp]
+	add	rbp, 8
+ret
+
+
+
+; TODO fix printing fractial part & check how fastcall pushed xmm
+; expected: %xmm0
+print_f:
+	vcvttss2si	rax, xmm0	; %rax = (int) %xmm0
+	call	print_d
+	vcvtsi2ss	xmm1, xmm1, rax	; %xmm1 = (float) %rax
+	vsubss		xmm0, xmm1	; %xmm0 -= %xmm1 (%xmm0 = 0.___)
+
+	mov	al, '.'
+	stosb
+
+	vmovss		xmm1, [PREC]
+	vmulss		xmm0, xmm0, xmm1; %xmm0 *= 10^6
+	vcvttss2si	rax, xmm0
+
+	call	print_d
+ret
+
