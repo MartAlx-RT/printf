@@ -43,6 +43,11 @@ fmt:		db	"%c, my pointer = %p, my str = {%s}, my bits = %b, my decimal = %d", 0x
 ;-----------------------------------------------------
 
 ;=====================================================
+reg_cnt:		dq	0
+xmm_cnt:		dq	0
+
+reg:	times(5)	dq	0xbadf00dd
+xmm:	times(8)	dd	0xbaadf00d
 printf_err_msg:		db	"printf: unexpected specifier", 0xa, 0x0
 ERR_MSG_LEN:		equ	$-printf_err_msg
 
@@ -75,16 +80,35 @@ global printf
 ;=====================================================
 
 printf:
-	mov	r10, [rsp]	; %r10 = ret adr
-	sub	rsp, 5*8
+	mov	[reg], rsi
+	mov	[reg+1*8], rdx
+	mov	[reg+2*8], rcx
+	mov	[reg+3*8], r8
+	mov	[reg+4*8], r9
 
-	mov	[rsp], rbp	; save %rbp
-	mov	[rsp+1*8], rsi
-	mov	[rsp+2*8], rdx
-	mov	[rsp+3*8], rcx
-	mov	[rsp+4*8], r8
-	mov	[rsp+5*8], r9
-	lea	rbp, [rsp+8]
+	vmovss	[xmm], xmm0
+	vmovss	[xmm+1*4], xmm1
+	vmovss	[xmm+2*4], xmm2
+	vmovss	[xmm+3*4], xmm3
+	vmovss	[xmm+4*4], xmm4
+	vmovss	[xmm+5*4], xmm5
+	vmovss	[xmm+6*4], xmm6
+	vmovss	[xmm+7*4], xmm7
+
+	push	rbp
+	mov	rbp, rsp
+	add	rbp, 2*8
+
+;	mov	r10, [rsp]	; %r10 = ret adr
+;	sub	rsp, 5*8
+;
+;	mov	[rsp], rbp	; save %rbp
+;	mov	[rsp+1*8], rsi
+;	mov	[rsp+2*8], rdx
+;	mov	[rsp+3*8], rcx
+;	mov	[rsp+4*8], r8
+;	mov	[rsp+5*8], r9
+;	lea	rbp, [rsp+8]
 
 ;	lea	r9, buf
 ;	add	r9, BUF_SIZE	; %r9 = max avaliable %rdi
@@ -112,8 +136,10 @@ printf:
 	cmp	al, 'a'		; min avalible symbol
 	jb	.dflt
 
-	mov	rdx, [rbp]
-	add	rbp, 8
+	call	get_int
+
+;	mov	rdx, [rbp]
+;	add	rbp, 8
 
 	lea	r8, spec_jmptbl	; %rbx = absolute jmptbl addr
 	and	rax, 0xff
@@ -191,8 +217,8 @@ printf:
 .exit:
 	call	write
 	pop	rbp
-	add	rsp, 4*8
-	mov	[rsp], r10
+;	add	rsp, 4*8
+;	mov	[rsp], r10
 ret
 ;=====================================================
 
@@ -444,5 +470,20 @@ ret
 
 
 
+; gets int argument
+;
+; %rbp 	must point to first stack arg
+; %rdx	ret val
+get_int:
+	mov	r8, [reg_cnt]
+	cmp	r8, 5
+	jae	.stk
 
-
+	lea	rdx, reg
+	mov	rdx, [rdx+8*r8]
+	inc	qword [reg_cnt]
+ret	; if arg is register
+.stk:
+	mov	rdx, [rbp]
+	add	rbp, 8
+ret
