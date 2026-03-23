@@ -2,7 +2,7 @@ default	rel
 
 %define	OFFSET(lbl)	lbl-spec_jmptbl
 ;---------------------------------------
-BUF_SIZE	equ	20
+BUF_SIZE	equ	1000
 ;---------------------------------------
 section .rodata
 align 8
@@ -189,11 +189,13 @@ printf:
 
 .dflt:
 	push	r10
+	push	rdi
 	mov	rdi, 1
 	lea	rsi, printf_err_msg
 	mov	rdx, ERR_MSG_LEN
 	mov	rax, 0x1
 	syscall
+	pop	rdi
 	pop	r10
 	mov	rax, 1		; ret val = 1 (error)
 	jmp	.exit
