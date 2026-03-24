@@ -48,8 +48,9 @@ xmm_cnt:		dq	0
 
 reg:	times(5)	dq	0xbadf00dd
 xmm:	times(8)	dd	0xbaadf00d
-printf_err_msg:		db	"printf: unexpected specifier", 0xa, 0x0
-ERR_MSG_LEN:		equ	$-printf_err_msg
+unxp_spec:		db	"printf: unexpected specifier", 0xa, 0x0
+null_s:			db	"(null)", 0xa, 0x0
+ERR_MSG_LEN:		equ	$-unxp_spec
 
 buf:	times BUF_SIZE	db	0
 ;=====================================================
@@ -80,6 +81,11 @@ global asm_printf
 ;=====================================================
 
 asm_printf:
+	test	rdi, rdi
+	jnz	.fmt_ok
+	ret
+
+.fmt_ok:
 	mov	qword [xmm_cnt], 0
 	mov	qword [reg_cnt], 0
 	; regs
@@ -90,14 +96,14 @@ asm_printf:
 	mov	[reg+4*8], r9
 
 	; floats
-	vmovss	[xmm], xmm0
-	vmovss	[xmm+1*4], xmm1
-	vmovss	[xmm+2*4], xmm2
-	vmovss	[xmm+3*4], xmm3
-	vmovss	[xmm+4*4], xmm4		; TODO not working, unfortunately
-	vmovss	[xmm+5*4], xmm5
-	vmovss	[xmm+6*4], xmm6
-	vmovss	[xmm+7*4], xmm7
+;	vmovss	[xmm], xmm0
+;	vmovss	[xmm+1*4], xmm1
+;	vmovss	[xmm+2*4], xmm2
+;	vmovss	[xmm+3*4], xmm3
+;	vmovss	[xmm+4*4], xmm4		; TODO not working, unfortunately
+;	vmovss	[xmm+5*4], xmm5
+;	vmovss	[xmm+6*4], xmm6
+;	vmovss	[xmm+7*4], xmm7
 
 	push	rbp
 	mov	rbp, rsp	; rbp -> first fastcall arg
@@ -172,6 +178,11 @@ asm_printf:
 
 .spec_s:
 	call	get_int
+	test	rdx, rdx
+	jnz	.s_ok
+	lea	rdx, null_s
+	
+.s_ok:
 	call	print_s
 	jmp	.continue
 
@@ -190,15 +201,13 @@ asm_printf:
 	jmp	.loop
 
 .dflt:
-	push	r10
 	push	rdi
 	mov	rdi, 1
-	lea	rsi, printf_err_msg
+	lea	rsi, unxp_spec
 	mov	rdx, ERR_MSG_LEN
 	mov	rax, 0x1
 	syscall
 	pop	rdi
-	pop	r10
 	mov	rax, 1		; ret val = 1 (error)
 	jmp	.exit
 
@@ -206,9 +215,8 @@ asm_printf:
 ;-----------------------------------------------------
 .exit:
 	call	write
+
 	pop	rbp
-;	add	rsp, 4*8
-;	mov	[rsp], r10
 ret
 ;=====================================================
 
@@ -343,6 +351,11 @@ print_b:
 
 .done:
 	cld
+
+	test	rcx, rcx
+	jnz	.loop
+	mov	rcx, 1
+
 .loop:
 	test	dl, 1
 	setnz	al
@@ -352,8 +365,7 @@ print_b:
 	and	rdx, ~(1)
 	rol	rdx, 1
 
-	test	rdx, rdx
-	jnz	.loop
+	loop	.loop
 ret
 ;=====================================================
 
@@ -510,6 +522,7 @@ print_f:
 
 	vmovss		xmm1, [PREC]
 	vmulss		xmm0, xmm0, xmm1; %xmm0 *= 10^6
+	vcvttss2si
 	vcvttss2si	rax, xmm0
 
 	call	print_d
