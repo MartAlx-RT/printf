@@ -5,7 +5,7 @@ extern int asm_printf(const char *fmt, ...);
 //-1, "love", 3802, 100, 31, 33
 //fmt:  "%d %s  %x %d%%%b%c"
 
-const char *fmt_nums = "my decimal = %d, my hex = %x, my oct = %o, my bits = %b\n"
+const char *fmt_nums = "my decimal = %d, my hex = %x, my oct = %o, my bits = %b\n, my float = %f\n"
 							"%d %s  %x %d%%%b%c\n";
 const char *fmt_empty= "";
 const char *fmt_d = "%d\n";
@@ -13,6 +13,7 @@ const char *fmt_x = "%x\n";
 const char *fmt_o = "%o\n";
 const char *fmt_b = "%b\n";
 const char *fmt_s = "%s\n";
+const char *fmt_f = "%f\n";
 
 
 int main(void)
@@ -49,12 +50,23 @@ int main(void)
 	asm_printf("bin test (expected 0):\n");
 	asm_printf(fmt_b, 0);
 
-	asm_printf("null str test:\n");
-	asm_printf(
+	asm_printf("Folat test (excepted 2.23):\n");
+	asm_printf(fmt_f, 2.23);
+
+	asm_printf("Float test (expected 12345.98765):\n");
+	asm_printf(fmt_f, 12345.98765);
+
+	asm_printf("Float test (expected -12345.98765):\n");
+	asm_printf(fmt_f, -12345.98765);
+
+	asm_printf("Float test (expected 0):\n");
+	asm_printf(fmt_f, 0.0);
 
 	asm_printf("Ded test (my printf):\n");
-	asm_printf(fmt_nums, 1234, 0xdeadbeef, 04321, 0b1011011101111011110, -1, "love", 3802, 100, 31, 33);
+	asm_printf(fmt_nums, 1234, 0xdeadbeef, 04321, 0b1011011101111011110, -1234.98765, -1, "love", 3802, 100, 31, 33);
 	asm_printf("Ded test (std printf):\n");
-	    printf(fmt_nums, 1234, 0xdeadbeef, 04321, 0b1011011101111011110, -1, "love", 3802, 100, 31, 33);
+	    printf(fmt_nums, 1234, 0xdeadbeef, 04321, 0b1011011101111011110, -1234.98765, -1, "love", 3802, 100, 31, 33);
+
+	//asm_printf("%f\n", 2.23);
 	return 0;
 }

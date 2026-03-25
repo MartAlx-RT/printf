@@ -2,7 +2,7 @@ default	rel
 
 %define	OFFSET(lbl)	lbl-spec_jmptbl
 ;---------------------------------------
-BUF_SIZE	equ	1000
+BUF_SIZE	equ	1024
 ;---------------------------------------
 section .rodata
 align 8
@@ -39,7 +39,8 @@ section .data
 dgt:		db	"0123456789abcdef"
 s:		db	"Hello!!!", 0x0
 
-PREC		dd	100000.0
+neg_flt		db	0		; 1 if flt number is negative
+PREC		dq	1000000.0
 ;-----------------------------------------------------
 
 ;=====================================================
@@ -47,10 +48,12 @@ reg_cnt:		dq	0
 xmm_cnt:		dq	0
 
 reg:	times(5)	dq	0xbadf00dd
-xmm:	times(8)	dd	0xbaadf00d
+xmm:	times(8)	dq	0xbaadf00d
+
 unxp_spec:		db	"printf: unexpected specifier", 0xa, 0x0
+UNXP_SPEC_LEN:		equ	$-unxp_spec
+
 null_s:			db	"(null)", 0xa, 0x0
-ERR_MSG_LEN:		equ	$-unxp_spec
 
 buf:	times BUF_SIZE	db	0
 ;=====================================================
@@ -96,14 +99,14 @@ asm_printf:
 	mov	[reg+4*8], r9
 
 	; floats
-;	vmovss	[xmm], xmm0
-;	vmovss	[xmm+1*4], xmm1
-;	vmovss	[xmm+2*4], xmm2
-;	vmovss	[xmm+3*4], xmm3
-;	vmovss	[xmm+4*4], xmm4		; TODO not working, unfortunately
-;	vmovss	[xmm+5*4], xmm5
-;	vmovss	[xmm+6*4], xmm6
-;	vmovss	[xmm+7*4], xmm7
+	vmovsd	[xmm], xmm0
+	vmovsd	[xmm+1*8], xmm1
+	vmovsd	[xmm+2*8], xmm2
+	vmovsd	[xmm+3*8], xmm3
+	vmovsd	[xmm+4*8], xmm4		; TODO not working, unfortunately
+	vmovsd	[xmm+5*8], xmm5
+	vmovsd	[xmm+6*8], xmm6
+	vmovsd	[xmm+7*8], xmm7
 
 	push	rbp
 	mov	rbp, rsp	; rbp -> first fastcall arg
@@ -204,7 +207,7 @@ asm_printf:
 	push	rdi
 	mov	rdi, 1
 	lea	rsi, unxp_spec
-	mov	rdx, ERR_MSG_LEN
+	mov	rdx, UNXP_SPEC_LEN
 	mov	rax, 0x1
 	syscall
 	pop	rdi
@@ -499,11 +502,11 @@ get_flt:
 	jae	.stk
 
 	lea	rdx, xmm
-	vmovss	xmm0, [rdx+8*r8]
+	vmovsd	xmm0, [rdx+8*r8]
 	inc	qword [xmm_cnt]
 ret	; if not stk
 .stk:
-	vmovss	xmm0, [rbp]
+	vmovsd	xmm0, [rbp]
 	add	rbp, 8
 ret
 
@@ -512,19 +515,53 @@ ret
 ; TODO fix printing fractial part & check how fastcall pushed xmm
 ; expected: %xmm0
 print_f:
-	vcvttss2si	rax, xmm0	; %rax = (int) %xmm0
+	mov	byte [neg_flt], 0
+
+	vcvttsd2si	rax, xmm0	; %rax = (int) %xmm0
+	cmp	rax, 0
+	jg	.positive_flt
+	mov	byte [neg_flt], 1
+.positive_flt:
+	vcvtsi2sd	xmm1, xmm1, rax	; %xmm1 = (float) %rax
 	call	print_d
-	vcvtsi2ss	xmm1, xmm1, rax	; %xmm1 = (float) %rax
-	vsubss		xmm0, xmm1	; %xmm0 -= %xmm1 (%xmm0 = 0.___)
+	vsubsd		xmm0, xmm1	; %xmm0 -= %xmm1 (%xmm0 = 0.___)
 
 	mov	al, '.'
 	stosb
 
-	vmovss		xmm1, [PREC]
-	vmulss		xmm0, xmm0, xmm1; %xmm0 *= 10^6
-	vcvttss2si
-	vcvttss2si	rax, xmm0
+	vmovsd		xmm1, [PREC]
+	vmulsd		xmm0, xmm0, xmm1; %xmm0 *= 10^6
+	vcvttsd2si	rax, xmm0
+	cmp	byte [neg_flt], 0
+	je	.next
+	mov	rdx, 1000000
+	sub	rdx, rax
+	xchg	rdx, rax
+.next:
 
-	call	print_d
+	call	print_nd
 ret
 
+
+
+print_nd:
+	mov	r8, 10
+
+	mov	rcx, 6
+	xor	rdx, rdx
+.push_digit:
+	div	r8
+
+	add	rdx, '0'
+	push	rdx
+	xor	rdx, rdx
+
+	loop	.push_digit
+
+	mov	rcx, 6
+	cld
+.print_digit:
+	pop	rax
+	stosb
+	loop	.print_digit
+ret
