@@ -41,6 +41,7 @@ s:		db	"Hello!!!", 0x0
 
 neg_flt		db	0		; 1 if flt number is negative
 PREC		dq	1000000.0
+inf_val		dq	0x7ff0000000000000
 ;-----------------------------------------------------
 
 ;=====================================================
@@ -54,9 +55,17 @@ unxp_spec:		db	"printf: unexpected specifier", 0xa, 0x0
 UNXP_SPEC_LEN:		equ	$-unxp_spec
 
 null_s:			db	"(null)", 0xa, 0x0
+nan_s:			db	"nan", 0xa, 0x0
+inf_s:			db	"inf", 0xa, 0x0
 
 buf:	times BUF_SIZE	db	0
 ;=====================================================
+
+
+
+
+
+
 
 
 
@@ -515,22 +524,37 @@ ret
 ; TODO fix printing fractial part & check how fastcall pushed xmm
 ; expected: %xmm0
 print_f:
+	vucomisd	xmm0, xmm0
+	jnp	.not_nan
+	lea	rdx, nan_s
+	call	print_s
+	jmp	.exit
+
+.not_nan:
+	vucomisd	xmm0, qword[inf_val]
+	jne	.not_inf
+	lea	rdx, inf_s
+	call	print_s
+	jmp	.exit
+
+.not_inf:
 	mov	byte [neg_flt], 0
 
 	vcvttsd2si	rax, xmm0	; %rax = (int) %xmm0
 	cmp	rax, 0
 	jg	.positive_flt
 	mov	byte [neg_flt], 1
+
 .positive_flt:
 	vcvtsi2sd	xmm1, xmm1, rax	; %xmm1 = (float) %rax
 	call	print_d
-	vsubsd		xmm0, xmm1	; %xmm0 -= %xmm1 (%xmm0 = 0.___)
+	vsubsd	xmm0, xmm1	; %xmm0 -= %xmm1 (%xmm0 = 0.___)
 
 	mov	al, '.'
 	stosb
 
-	vmovsd		xmm1, [PREC]
-	vmulsd		xmm0, xmm0, xmm1; %xmm0 *= 10^6
+	vmovsd	xmm1, [PREC]
+	vmulsd	xmm0, xmm0, xmm1; %xmm0 *= 10^6
 	vcvttsd2si	rax, xmm0
 	cmp	byte [neg_flt], 0
 	je	.next
@@ -540,6 +564,8 @@ print_f:
 .next:
 
 	call	print_nd
+
+.exit:
 ret
 
 

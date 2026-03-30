@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <math.h>
 
 extern int asm_printf(const char *fmt, ...);
 
@@ -61,6 +62,12 @@ int main(void)
 
 	asm_printf("Float test (expected 0):\n");
 	asm_printf(fmt_f, 0.0);
+
+	asm_printf("Float nan test (excepted 'nan'):\n");
+	asm_printf(fmt_f, NAN);
+
+	asm_printf("Float inf test (excepted 'inf'):\n");
+	asm_printf(fmt_f, INFINITY);
 
 	asm_printf("Ded test (my printf):\n");
 	asm_printf(fmt_nums, 1234, 0xdeadbeef, 04321, 0b1011011101111011110, -1234.98765, -1, "love", 3802, 100, 31, 33);
